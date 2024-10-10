@@ -51,10 +51,12 @@ async def check_chapter_updates():
             chapter_link = elem.find('a')['href'] if elem.find('a') else None
             chapters.append({'number': number,'title': chapter_info, 'link': chapter_link})
             #store_chapter(chapters[number])
-            number+=1
+            #number+=1
 
         for chapter in reversed(chapters):
+            chapter['number'] = number
             print(chapter)
+            number+=1
 
         #await channel.send(chapters[0][1])  # Send the latest chapter for now ---- Latest link is stored under chapters[0][1]
         await asyncio.sleep(3600)  # Wait for 3600 seconds (1 hour)
