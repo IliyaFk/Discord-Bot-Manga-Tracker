@@ -1,98 +1,68 @@
 import os
 import discord
+from discord.ext import commands
 import asyncio
 from dotenv import load_dotenv
-import requests
-from bs4 import BeautifulSoup
 from pymongo import MongoClient
-from pymongo.errors import DuplicateKeyError
+from MangaTracker import *
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 
-#Database Setup
+# Database Setup
 MONGO_URI = os.getenv('MONGODB_TOKEN')
-clinetDB = MongoClient(MONGO_URI)
-db = clinetDB['DiscordDB']
+clientDB = MongoClient(MONGO_URI)
+db = clientDB['DiscordDB']
 chapters_collection = db['chapters']
 chapters_collection.create_index([('number', 1)], unique=True)
 
-#Line to delete entries in chapters_collection for debugging purposes
-#chapters_collection.delete_many({})
+################################ Delete specific chapter from database for debugging purposes ############################
+# chapter_number_to_delete = 1133  # Change this to the chapter number you want to delete
+# result = chapters_collection.delete_one({'number': chapter_number_to_delete})
+##########################################################################################################################
 
-response = requests.get('https://mangafire.to/manga/one-piece.dkw')
-soup = BeautifulSoup(response.content,'html.parser')
+# Line to delete entries in chapters_collection for debugging purposes
+# chapters_collection.delete_many({})
 
-#Discord Bot Setup
+url = "https://mangafire.to"
 
+# Discord Bot Setup
 intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix='!', intents=intents)
 
-client = discord.Client(intents=intents)
+# Command to track a manga
+@bot.command(name='track')
+async def track(ctx, *, manga_name: str):
+    print(f'Command triggered by {ctx.author.name}')
+    await ctx.send(f'Tracking Manga: {manga_name}')
 
-def store_chapter(chapter):
-    try:
-        chapters_collection.insert_one(chapter)
-        print(f"Chapter {chapter['number']} added to the database.")
-    except DuplicateKeyError:
-        print(f"Chapter {chapter['number']} already exists in the database.")
+# Simple ping command
+@bot.command(name='ping')
+async def ping(ctx):
+    await ctx.send('Pong!')
 
-
+# Background task to check for chapter updates
 async def check_chapter_updates():
-    await client.wait_until_ready()  # Wait until the bot has connected to Discord
-    channel = client.get_channel(809917094388039713)  # Replace CHANNEL_ID with your channel's ID
+    await bot.wait_until_ready()  # Wait until the bot has connected to Discord
 
+    while not bot.is_closed():  # Keep running the task until the bot is closed
+        chapter = checkUpdates(url)
 
-    while not client.is_closed():  # Keep running the task until the bot is closed
+        if chapter:
+            print(chapter)
+            #Send message to the channel
+            channel = bot.get_channel(809917094388039713)  # Ensure correct channel ID is used
+            if channel:
+                asyncio.run_coroutine_threadsafe(channel.send(url + chapter['link']), bot.loop)
 
-        #Scraping Logic
-        chapters = []
-        number = 0
-        #Get the latest chapter from the mangafire.to website
-        elem = soup.find('li', class_='item')
-        if elem:
-            chapter_info = elem.find('span').get_text() if elem.find('span') else None
-            chapter_link = elem.find('a')['href'] if elem.find('a') else None
-            chapters.append({'number': number,'title': chapter_info, 'link': chapter_link})
-        latest_chapter = chapters[0]
-        
-        last_chapter = chapters_collection.find_one({}, sort=[('number', -1)])  #Last chapter entry in the database
-        print(last_chapter)
+        await asyncio.sleep(3600)  # Wait for 1 hour before checking again
 
-        #Check if the latest chapter from the last time website scraped is a new chapter not in the database
-        #If it is then add it to the database
-        #Also want to add a discord message here to alert that a chapter released
-        if (latest_chapter)['title'] != last_chapter['title']:
-            latest_chapter['number'] = latest_chapter['number'] + 1
-            store_chapter(latest_chapter)
-
-
-        ######################################################################################################################################
-       
-        #This snippet should be used when first scraping data for a new manga and adding all chapter entries to the database ############
-        #Not being used  right now because chapter entries already for one piece ##############
-        #Will work on this when adding funtionality to request tracking a new manga #############
-        # for elem in soup.find_all('li',class_='item'):
-        #     chapter_info = elem.find('span').get_text() if elem.find('span') else None
-        #     chapter_link = elem.find('a')['href'] if elem.find('a') else None
-        #     chapters.append({'number': number,'title': chapter_info, 'link': chapter_link})
-            #store_chapter(chapters[number])
-            #number+=1
-
-        #To align the id numbers and chapter numbers together
-        # for chapter in reversed(chapters):
-        #     chapter['number'] = number
-        #     store_chapter(chapter)
-        #     number+=1
-
-        #######################################################################################################################################
-
-        #await channel.send(chapters[0][1])  # Send the latest chapter for now ---- Latest link is stored under chapters[0][1]
-        await asyncio.sleep(3600)  # Wait for 3600 seconds (1 hour) or whatever time I set it to be later
-
-
-@client.event
+# Event when the bot is ready
+@bot.event
 async def on_ready():
-    print(f'{client.user} has connected to Discord!')
-    client.loop.create_task(check_chapter_updates())
+    print(f'{bot.user} has connected to Discord!')
+    bot.loop.create_task(check_chapter_updates())  # Start the background task
 
-client.run(TOKEN)
+# Run the bot
+bot.run(TOKEN)
