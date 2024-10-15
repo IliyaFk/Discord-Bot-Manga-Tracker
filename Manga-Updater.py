@@ -39,7 +39,8 @@ async def track(ctx, *, manga_name: str):
     guild_id = ctx.guild.id
 
     #Query the database for the user
-    user = user_collection.find_one({"user_id": str(user_id), "guild.guild.id": str(guild_id)})
+    user = user_collection.find_one({"user_id": str(user_id), "guilds.guild_id": str(guild_id)})
+
 
     if user:
         #Check if the manga is already being tracked by the user
