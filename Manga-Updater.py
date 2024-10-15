@@ -42,6 +42,7 @@ async def track(ctx, *, manga_name: str):
     user = user_collection.find_one({"user_id": str(user_id), "guild.guild.id": str(guild_id)})
 
     if user:
+        #Check if the manga is already being tracked by the user
         for guild in user['guilds']:
             if guild['guild_id'] == str(guild_id):
                 tracked_manga = guild.get('manga_tracking', [])
@@ -58,6 +59,7 @@ async def track(ctx, *, manga_name: str):
                     await ctx.send(f"You are already tracking {manga_name}.")
                 break
     else:
+        #Insert new user tracking data if not found
         user_collection.insert_one({
             "user_id": str(user_id),
             "guilds": [
@@ -73,10 +75,25 @@ async def track(ctx, *, manga_name: str):
         })
         await ctx.send(f"Started tracking {manga_name} for user {ctx.author.display_name}.")
 
-    # print(f'Command triggered by {ctx.author.name}')
-    # await ctx.send(f'Tracking Manga: {manga_name}')
-    # print(f"Message received in Server ID: {ctx.guild.id}")
-    # print(f"Message received in channel ID: {ctx.channel.id}")
+
+@bot.command(name='mymanga')
+async def my_manga(ctx):
+    user_id = ctx.author.id
+    guild_id = ctx.guild.id
+
+    user = user_collection.find_one({"user_id": str(user_id), "guilds.guild_id": str(guild_id)})
+
+    if user:
+        for guild in user['guilds']:
+            if guild['guild_id'] == str(guild_id):
+                tracked_manga = guild.get('manga_tracking', [])
+                if tracked_manga:
+                    manga_list = "\n".join([f"{manga['manga_name']}" for manga in tracked_manga])
+                    await ctx.send(f"Here is the list of manga you are tracking:\n{manga_list}")
+                else:
+                    await ctx.send("You are not tracking any manga.")
+    else:
+        await ctx.send("You are not tracking any manga.")
 
 # Simple ping command
 @bot.command(name='ping')
@@ -107,25 +124,6 @@ async def on_ready():
     # for guild in bot.guilds:
     #     print(f"Connected to server: {guild.name} (ID: {guild.id})")
     bot.loop.create_task(check_chapter_updates())  # Start the background task
-
-
-#Function to get server and channel id of events
-# #Will be used to keep track of what server is keeeping track of what mangas
-# @bot.event
-# async def on_message(message):
-#     if message.guild: #Check if the message was sent in a server and not a dm
-#         guild_id = message.guild.id
-#         #print(f"Message received in Server ID: {guild_id}")
-
-#     if message.author == bot.user:
-#         return #Ignore messages sent by the bot
-    
-#     channel = message.channel
-#     channel_id = channel.id
-#     #print(f"Message received in channel ID: {channel_id}")
-
-#     await bot.process_commands(message)
-    
 
 # Run the bot
 bot.run(TOKEN)
