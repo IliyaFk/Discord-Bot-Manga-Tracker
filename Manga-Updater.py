@@ -108,6 +108,35 @@ async def my_manga(ctx):
 async def ping(ctx):
     await ctx.send('Pong!')
 
+@bot.command(name='untrack')
+async def untrack(ctx, *, manga_name: str ):
+    user_id = ctx.author.id
+    guild_id = ctx.guild.id
+
+    mangas = trackManga(manga_name)
+    title = (mangas[0])['title']
+    link = (mangas[0])['link']
+
+    #Query the database for the user
+    user = user_collection.find_one({"user_id": str(user_id), "guilds.guild_id": str(guild_id)})
+
+    if user:
+        #Check if the manga is being tracked by the user
+        for guild in user['guilds']:
+            if guild['guild_id'] == str(guild_id):
+                tracked_manga = guild.get('manga_tracking', [])
+                if any(manga['manga_name'] == title for manga in tracked_manga):
+                    user_collection.update_one(
+                        {"user_id": str(user_id), "guilds.guild_id": str(guild_id)},
+                        {"$pull": {"guilds.$.manga_tracking": {"manga_name": title}}}
+                    )
+                    await ctx.send(f"Stopped tracking {title} for user {ctx.author.display_name}.")
+                else:
+                    await ctx.send(f"{title} is not being tracked")
+                break
+    else:
+        await ctx.send(f"User not found")
+
 # Background task to check for chapter updates
 async def check_chapter_updates():
     await bot.wait_until_ready()  # Wait until the bot has connected to Discord
