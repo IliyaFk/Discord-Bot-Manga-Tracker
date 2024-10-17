@@ -12,11 +12,23 @@ db = clientDB['DiscordDB']
 chapters_collection = db['chapters']
 chapters_collection.create_index([('number', 1)], unique=True)
 
+link = "https://mangafire.to/filter?keyword="
+
 response = requests.get('https://mangafire.to/manga/one-piece.dkw')
 soup = BeautifulSoup(response.content, 'html.parser')
 
 def trackManga(mangaName):
-    print(mangaName)
+    filter = requests.get(link+mangaName)
+    soupy = BeautifulSoup(filter.content, 'html.parser')
+    elem = soupy.find('div', class_='inner')
+    manga = []
+    if elem:
+        manga_title = elem.find_all('a')[1].text if len (elem.find('a')) >= 1 else None
+        manga_link = elem.find('a')['href'] if elem.find('a') else None
+        manga.append({'title': manga_title, 'link': manga_link})
+    #print(mangaName)
+    #print(manga)
+    return manga
 
 def store_chapter(chapter):
     try:

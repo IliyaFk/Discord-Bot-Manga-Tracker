@@ -41,23 +41,29 @@ async def track(ctx, *, manga_name: str):
     #Query the database for the user
     user = user_collection.find_one({"user_id": str(user_id), "guilds.guild_id": str(guild_id)})
 
+    mangas = trackManga(manga_name)
+    title = (mangas[0])['title']
+    link = (mangas[0])['link']
+    print(title)
+
 
     if user:
         #Check if the manga is already being tracked by the user
         for guild in user['guilds']:
             if guild['guild_id'] == str(guild_id):
                 tracked_manga = guild.get('manga_tracking', [])
-                if not any(manga['manga_name'] == manga_name for manga in tracked_manga):
+                if not any(manga['manga_name'] == title for manga in tracked_manga):
                     guild['manga_tracking'].append({
-                        'manga_name': manga_name
+                        'manga_name': title,
+                        'manga_link': link
                     })
                     user_collection.update_one(
                         {"user_id": str(user_id), "guilds.guild_id": str(guild_id)},
                         {"$set": {"guilds.$.manga_tracking": guild['manga_tracking']}}
                     )
-                    await ctx.send(f"Started tracking {manga_name} for user {ctx.author.display_name}.")
+                    await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
                 else:
-                    await ctx.send(f"You are already tracking {manga_name}.")
+                    await ctx.send(f"You are already tracking {title}.")
                 break
     else:
         #Insert new user tracking data if not found
@@ -68,13 +74,14 @@ async def track(ctx, *, manga_name: str):
                     "guild_id": str(guild_id),
                     "manga_tracking": [
                         {
-                            "manga_name": manga_name,
+                            "manga_name": title,
+                            "manga_link": link
                         }
                     ]
                 }
             ]
         })
-        await ctx.send(f"Started tracking {manga_name} for user {ctx.author.display_name}.")
+        await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
 
 
 @bot.command(name='mymanga')
