@@ -144,12 +144,12 @@ async def check_chapter_updates():
     while not bot.is_closed():  # Keep running the task until the bot is closed
         chapter = checkUpdates(url)
 
-        if chapter:
-            print(chapter)
-            #Send message to the channel
-            channel = bot.get_channel(809917094388039713)  # Ensure correct channel ID is used
-            if channel:
-                asyncio.run_coroutine_threadsafe(channel.send(url + chapter['link']), bot.loop)
+        # if chapter:
+        #     print(chapter)
+        #     #Send message to the channel
+        #     channel = bot.get_channel(809917094388039713)  # Ensure correct channel ID is used
+        #     if channel:
+        #         asyncio.run_coroutine_threadsafe(channel.send(url + chapter['link']), bot.loop)
 
         await asyncio.sleep(3600)  # Wait for 1 hour before checking again
 
