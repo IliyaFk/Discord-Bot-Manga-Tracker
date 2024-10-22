@@ -61,6 +61,10 @@ async def track(ctx, *, manga_name: str):
                         {"user_id": str(user_id), "guilds.guild_id": str(guild_id)},
                         {"$set": {"guilds.$.manga_tracking": guild['manga_tracking']}}
                     )
+                    existing_collections = db.list_collection_names()
+                    if manga_name not in existing_collections:
+                        db.create_collection(title)
+                        newCollection(title,link)
                     await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
                 else:
                     await ctx.send(f"You are already tracking {title}.")
@@ -81,6 +85,10 @@ async def track(ctx, *, manga_name: str):
                 }
             ]
         })
+        existing_collections = db.list_collection_names()
+        if manga_name not in existing_collections:
+            db.create_collection(title)
+            newCollection(title,link)
         await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
 
 
@@ -142,7 +150,7 @@ async def check_chapter_updates():
     await bot.wait_until_ready()  # Wait until the bot has connected to Discord
 
     while not bot.is_closed():  # Keep running the task until the bot is closed
-        chapter = checkUpdates(url)
+        checkManga()
 
         # if chapter:
         #     print(chapter)

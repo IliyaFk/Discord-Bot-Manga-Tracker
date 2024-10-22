@@ -119,26 +119,3 @@ def checkManga():
             print(f" Manga: {manga_name}, Link: {manga_link}")
         
     checkCollections()
-
-def checkUpdates(url):
-    checkManga()
-    # chapters = []
-    # number = 0
-    # # Get the latest chapter from the website
-    # elem = soup.find('li', class_='item')
-    # if elem:
-    #     chapter_info = elem.find('span').get_text() if elem.find('span') else None
-    #     chapter_link = elem.find('a')['href'] if elem.find('a') else None
-    #     chapters.append({'number': number, 'title': chapter_info, 'link': chapter_link})
-    # latest_chapter = chapters[0]
-
-    # print(url + latest_chapter['link'])
-
-    # last_chapter = chapters_collection.find_one({}, sort=[('number', -1)])  # Last chapter entry in the database
-    # print(last_chapter)
-
-    # Check if the latest chapter is new
-    # if latest_chapter['title'] != last_chapter['title']:
-    #     latest_chapter['number'] = last_chapter['number'] + 1  # Increment chapter number
-    #     return store_chapter(latest_chapter)
-    # return False
