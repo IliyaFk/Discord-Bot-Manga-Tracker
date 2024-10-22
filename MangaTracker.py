@@ -16,8 +16,8 @@ manga_names = []
 
 link = "https://mangafire.to/filter?keyword="
 
-response = requests.get('https://mangafire.to/manga/one-piece.dkw')
-soup = BeautifulSoup(response.content, 'html.parser')
+#response = requests.get('https://mangafire.to/manga/one-piece.dkw')
+#soup = BeautifulSoup(response.content, 'html.parser')
 
 #Find manga and link based on user input gathered from track command
 def trackManga(mangaName):
@@ -31,9 +31,9 @@ def trackManga(mangaName):
         manga.append({'title': manga_title, 'link': manga_link})
     return manga
 
-def store_chapter(chapter):
+def store_chapter(collection_name,chapter):
     try:
-        chapters_collection.insert_one(chapter)
+        db[collection_name].insert_one(chapter)
         print(f"Chapter {chapter['number']} added to the database.")
         return chapter
     except DuplicateKeyError:
@@ -45,12 +45,60 @@ def checkCollections():
     print(manga_names)
     for manga in manga_names:
         manga_name = manga['name']
+        manga_link = manga['link']
         if manga_name in existing_collections:
             print(f"Collection for '{manga_name}' already exists.")
+            existingCollection(manga_name, manga_link)
         else:
             # Create collection if it doesn't exist
             db.create_collection(manga_name)
             print(f"Created collection for '{manga_name}'.")
+            newCollection(manga_name, manga_link)
+
+def existingCollection(manga_name, manga_link):
+    response = requests.get('https://mangafire.to'+manga_link)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    collection_name = db[manga_name]
+    chapters = []
+    number = 0
+    # Get the latest chapter from the website
+    elem = soup.find('li', class_='item')
+    if elem:
+        chapter_info = elem.find('span').get_text() if elem.find('span') else None
+        chapter_link = elem.find('a')['href'] if elem.find('a') else None
+        chapters.append({'number': number, 'title': chapter_info, 'link': chapter_link})
+    latest_chapter = chapters[0]
+
+   #print(url + latest_chapter['link'])
+
+    last_chapter = collection_name.find_one({}, sort=[('number', -1)])  # Last chapter entry in the database
+    print(last_chapter)
+
+    #Check if the latest chapter is new
+    if latest_chapter['title'] != last_chapter['title']:
+        latest_chapter['number'] = last_chapter['number'] + 1  # Increment chapter number
+        return store_chapter(collection_name,latest_chapter)
+    return False
+
+def newCollection(manga_name, manga_link):
+    response = requests.get('https://mangafire.to'+manga_link)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    collection_name = db[manga_name]
+    chapters = []
+    number = 0
+    for elem in soup.find_all('li',class_='item'):
+        chapter_info = elem.find('span').get_text() if elem.find('span') else None
+        chapter_link = elem.find('a')['href'] if elem.find('a') else None
+        chapters.append({'number': number,'title': chapter_info, 'link': chapter_link})
+        #store_chapter(chapters[number])
+        #number+=1
+        #number+=1
+
+    for chapter in reversed(chapters):
+        chapter['number'] = number
+        #print(chapter)
+        number+=1
+        store_chapter(manga_name,chapter)
 
 def checkManga():
     all_users = user_collection.find()
