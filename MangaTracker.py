@@ -48,6 +48,7 @@ def checkCollections():
         manga_link = manga['link']
         if manga_name in existing_collections:
             print(f"Collection for '{manga_name}' already exists.")
+            print(f" Manga: {manga_name}, Link: {manga_link}")
             existingCollection(manga_name, manga_link)
         else:
             # Create collection if it doesn't exist
@@ -69,7 +70,7 @@ def existingCollection(manga_name, manga_link):
         chapters.append({'number': number, 'title': chapter_info, 'link': chapter_link})
     latest_chapter = chapters[0]
 
-   #print(url + latest_chapter['link'])
+    print(latest_chapter['title'] + latest_chapter['link'])
 
     last_chapter = collection_name.find_one({}, sort=[('number', -1)])  # Last chapter entry in the database
     print(last_chapter)
@@ -77,7 +78,7 @@ def existingCollection(manga_name, manga_link):
     #Check if the latest chapter is new
     if latest_chapter['title'] != last_chapter['title']:
         latest_chapter['number'] = last_chapter['number'] + 1  # Increment chapter number
-        return store_chapter(collection_name,latest_chapter)
+        return store_chapter(manga_name,latest_chapter)
     return False
 
 def newCollection(manga_name, manga_link):
@@ -101,21 +102,28 @@ def newCollection(manga_name, manga_link):
         store_chapter(manga_name,chapter)
 
 def checkManga():
+    new_chapters = []  # Store newly detected chapters
+
     all_users = user_collection.find()
-
     for user in all_users:
-        user_id = user["user_id"]
-        print(f"User ID: {user_id}")
-
         for guild in user.get("guilds", []):
-            guild_id = guild["guild_id"]
-            print(f" Guild ID: {guild_id}")
+            for manga in guild.get("manga_tracking", []):
+                manga_name = manga["manga_name"]
+                manga_link = manga.get("manga_link", "No link available")  # In case a link was never stored
+                
+                if manga_name not in manga_names:
+                    manga_names.append({'name': manga_name, 'link': manga_link})
+                
+                # Check for new chapters
+                new_chapter = existingCollection(manga_name, manga_link)  # Returns latest chapter if new
+                if new_chapter:
+                    new_chapters.append({
+                        "manga_name": manga_name,  # Appending manga name
+                        "title": new_chapter,      # Title or chapter name
+                        "link": manga_link         # Link to the chapter
+                })
+    print(new_chapters)
+    return new_chapters  # Return list of new chapters
 
-        for manga in guild.get("manga_tracking", []):
-            manga_name = manga["manga_name"]
-            manga_link = manga.get("manga_link", "No link available") #in case a link was never stored
-            if manga_name not in manga_names:
-                manga_names.append({'name':manga_name, 'link': manga_link})
-            print(f" Manga: {manga_name}, Link: {manga_link}")
         
     checkCollections()

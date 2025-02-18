@@ -6,10 +6,11 @@ from dotenv import load_dotenv
 from pymongo import MongoClient
 from MangaTracker import *
 
+#Get discord token from .env file
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 
-# Database Setup
+# Database Setup -- do I need this anymore??
 MONGO_URI = os.getenv('MONGODB_TOKEN')
 clientDB = MongoClient(MONGO_URI)
 db = clientDB['DiscordDB']
@@ -18,13 +19,14 @@ chapters_collection.create_index([('number', 1)], unique=True)
 user_collection = db['users']
 
 ################################ Delete specific chapter from database for debugging purposes ############################
-# chapter_number_to_delete = 1133  # Change this to the chapter number you want to delete
-# result = chapters_collection.delete_one({'number': chapter_number_to_delete})
+#chapter_number_to_delete = 1135  # Change this to the chapter number you want to delete
+#result = One_Piece.delete_one({'number': chapter_number_to_delete})
 ##########################################################################################################################
 
 # Line to delete entries in chapters_collection for debugging purposes
 # chapters_collection.delete_many({})
 
+#Site where I extract chapter info from
 url = "https://mangafire.to"
 
 # Discord Bot Setup
@@ -147,19 +149,61 @@ async def untrack(ctx, *, manga_name: str ):
 
 # Background task to check for chapter updates
 async def check_chapter_updates():
-    await bot.wait_until_ready()  # Wait until the bot has connected to Discord
+    await bot.wait_until_ready()  # Wait until bot is connected
 
-    while not bot.is_closed():  # Keep running the task until the bot is closed
-        checkManga()
+    while not bot.is_closed():
+        new_chapters = checkManga()  # Get new chapters
 
-        # if chapter:
-        #     print(chapter)
-        #     #Send message to the channel
-        #     channel = bot.get_channel(809917094388039713)  # Ensure correct channel ID is used
-        #     if channel:
-        #         asyncio.run_coroutine_threadsafe(channel.send(url + chapter['link']), bot.loop)
+        if not new_chapters:
+            print("No new chapters found.")
+        else:
+            for chapter in new_chapters:
+                chapter_title = chapter.get('title', 'Unknown Title')
+                chapter_link = chapter.get('link', '')
+                manga_name = chapter.get('manga_name', 'Unknown Manga')
 
-        await asyncio.sleep(3600)  # Wait for 1 hour before checking again
+                print(f"Preparing to send update for {manga_name} - {chapter_title}")
+
+                # Fetch all users tracking this manga
+                tracked_users = user_collection.find({"guilds.manga_tracking.manga_name": manga_name})
+                print(tracked_users)
+                for user in tracked_users:
+                    print(f"Checking user {user['user_id']}...")  # Debugging step
+
+                    for guild in user["guilds"]:
+                        print(f"Checking guild ID: {guild['guild_id']}")  # Debugging step
+
+                        if any(manga["manga_name"] == manga_name for manga in guild["manga_tracking"]):
+                            guild_id = int(guild["guild_id"])
+                            guild_obj = bot.get_guild(guild_id)
+
+                            if not guild_obj:
+                                print(f"⚠️ Guild {guild_id} not found. Is the bot in this server?")
+                                continue
+
+                            print(f"✅ Found guild: {guild_obj.name} (ID: {guild_id})")
+
+                            # Check available text channels
+                            available_channels = [ch for ch in guild_obj.text_channels if ch.permissions_for(guild_obj.me).send_messages]
+                            if not available_channels:
+                                print(f"⚠️ No channels available to send messages in {guild_obj.name}. Skipping...")
+                                continue
+
+                            # Choose the first available text channel
+                            channel = available_channels[0]
+                            print(f"✅ Using channel: {channel.name} (ID: {channel.id}) in {guild_obj.name}")
+
+                            # Send message
+                            chapter_title = chapter_title['title']  # Extract the title from the dictionary
+                            message = f"📢 New chapter released: **{chapter_title}**\n📖 Read here: {url}{chapter_link}"
+
+                            await channel.send(message)
+                            print(f"✅ Sent update in {guild_obj.name}: {message}")
+
+        await asyncio.sleep(3600)  # Wait 1 hour before checking again
+
+
+
 
 # Event when the bot is ready
 @bot.event
