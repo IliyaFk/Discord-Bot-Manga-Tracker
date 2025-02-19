@@ -14,8 +14,8 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 MONGO_URI = os.getenv('MONGODB_TOKEN')
 clientDB = MongoClient(MONGO_URI)
 db = clientDB['DiscordDB']
-chapters_collection = db['chapters']
-chapters_collection.create_index([('number', 1)], unique=True)
+#chapters_collection = db['chapters']
+#chapters_collection.create_index([('number', 1)], unique=True)
 user_collection = db['users']
 
 ################################ Delete specific chapter from database for debugging purposes ############################
@@ -23,8 +23,10 @@ user_collection = db['users']
 #result = One_Piece.delete_one({'number': chapter_number_to_delete})
 ##########################################################################################################################
 
-# Line to delete entries in chapters_collection for debugging purposes
-# chapters_collection.delete_many({})
+#Delete collection in the database
+#mycol = db["Wistoria: Wand and Sword"]
+#mycol.drop() 
+
 
 #Site where I extract chapter info from
 url = "https://mangafire.to"
@@ -66,7 +68,7 @@ async def track(ctx, *, manga_name: str):
                     existing_collections = db.list_collection_names()
                     if manga_name not in existing_collections:
                         db.create_collection(title)
-                        newCollection(title,link)
+                        existingCollection(title,link)
                     await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
                 else:
                     await ctx.send(f"You are already tracking {title}.")
@@ -90,7 +92,7 @@ async def track(ctx, *, manga_name: str):
         existing_collections = db.list_collection_names()
         if manga_name not in existing_collections:
             db.create_collection(title)
-            newCollection(title,link)
+            existingCollection(title,link)
         await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
 
 

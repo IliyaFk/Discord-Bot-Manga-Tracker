@@ -9,8 +9,8 @@ load_dotenv()
 MONGO_URI = os.getenv('MONGODB_TOKEN')
 clientDB = MongoClient(MONGO_URI)
 db = clientDB['DiscordDB']
-chapters_collection = db['chapters']
-chapters_collection.create_index([('number', 1)], unique=True)
+#chapters_collection = db['chapters']
+#chapters_collection.create_index([('number', 1)], unique=True)
 user_collection = db['users']
 manga_names = []
 
@@ -34,6 +34,8 @@ def trackManga(mangaName):
 def store_chapter(collection_name,chapter):
     try:
         db[collection_name].insert_one(chapter)
+        if db[collection_name].count_documents({}) > 1:
+            db[collection_name].delete_one({'number':0})
         print(f"Chapter {chapter['number']} added to the database.")
         return chapter
     except DuplicateKeyError:
@@ -54,7 +56,7 @@ def checkCollections():
             # Create collection if it doesn't exist
             db.create_collection(manga_name)
             print(f"Created collection for '{manga_name}'.")
-            newCollection(manga_name, manga_link)
+            existingCollection(manga_name, manga_link)
 
 def existingCollection(manga_name, manga_link):
     response = requests.get('https://mangafire.to'+manga_link)
@@ -76,7 +78,10 @@ def existingCollection(manga_name, manga_link):
     print(last_chapter)
 
     #Check if the latest chapter is new
-    if latest_chapter['title'] != last_chapter['title']:
+    if db[manga_name].count_documents({}) == 0:
+        return store_chapter(manga_name,latest_chapter)
+
+    elif latest_chapter['title'] != last_chapter['title']:
         latest_chapter['number'] = last_chapter['number'] + 1  # Increment chapter number
         return store_chapter(manga_name,latest_chapter)
     return False
@@ -125,5 +130,3 @@ def checkManga():
     print(new_chapters)
     return new_chapters  # Return list of new chapters
 
-        
-    checkCollections()
