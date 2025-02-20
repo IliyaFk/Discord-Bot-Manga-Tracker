@@ -116,9 +116,6 @@ async def my_manga(ctx):
         await ctx.send("You are not tracking any manga.")
 
 # Simple ping command
-@bot.command(name='ping')
-async def ping(ctx):
-    await ctx.send('Pong!')
 
 @bot.command(name='untrack')
 async def untrack(ctx, *, manga_name: str ):

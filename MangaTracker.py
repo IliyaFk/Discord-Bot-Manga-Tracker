@@ -36,10 +36,10 @@ def store_chapter(collection_name,chapter):
         db[collection_name].insert_one(chapter)
         if db[collection_name].count_documents({}) > 1:
             db[collection_name].delete_one({'number':0})
-        print(f"Chapter {chapter['number']} added to the database.")
+        print(f"Latest chapter added to the database.")
         return chapter
     except DuplicateKeyError:
-        print(f"Chapter {chapter['number']} already exists in the database.")
+        print(f"Latest chapter already exists in the database.")
         return False
 
 def checkCollections():
@@ -85,26 +85,6 @@ def existingCollection(manga_name, manga_link):
         latest_chapter['number'] = last_chapter['number'] + 1  # Increment chapter number
         return store_chapter(manga_name,latest_chapter)
     return False
-
-def newCollection(manga_name, manga_link):
-    response = requests.get('https://mangafire.to'+manga_link)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    collection_name = db[manga_name]
-    chapters = []
-    number = 0
-    for elem in soup.find_all('li',class_='item'):
-        chapter_info = elem.find('span').get_text() if elem.find('span') else None
-        chapter_link = elem.find('a')['href'] if elem.find('a') else None
-        chapters.append({'number': number,'title': chapter_info, 'link': chapter_link})
-        #store_chapter(chapters[number])
-        #number+=1
-        #number+=1
-
-    for chapter in reversed(chapters):
-        chapter['number'] = number
-        #print(chapter)
-        number+=1
-        store_chapter(manga_name,chapter)
 
 def checkManga():
     new_chapters = []  # Store newly detected chapters
