@@ -23,7 +23,10 @@ link = "https://mangafire.to/filter?keyword="
 def trackManga(mangaName):
     filter = requests.get(link+mangaName)
     soupy = BeautifulSoup(filter.content, 'html.parser')
-    elem = soupy.find('div', class_='inner')
+
+    main_section = soupy.find('main')
+    elem = main_section.find('div', class_='inner')
+    #elem = soupy.find('div', class_='inner')
     manga = []
     if elem:
         manga_title = elem.find_all('a')[1].text if len (elem.find('a')) >= 1 else None
@@ -65,6 +68,9 @@ def existingCollection(manga_name, manga_link):
     chapters = []
     number = 0
     # Get the latest chapter from the website
+    print(f"Fetching manga page: https://mangafire.to{manga_link}")
+    print(f"Response Status Code: {response.status_code}")
+
     elem = soup.find('li', class_='item')
     if elem:
         chapter_info = elem.find('span').get_text() if elem.find('span') else None
@@ -109,4 +115,3 @@ def checkManga():
                 })
     print(new_chapters)
     return new_chapters  # Return list of new chapters
-

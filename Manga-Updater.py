@@ -36,6 +36,39 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+# Command to set the channel the bot can message in
+@bot.command(name='setchannel')
+@commands.has_permissions(administrator=True)
+async def set_channel(ctx, channel: discord.TextChannel):
+    guild_id = ctx.guild.id
+    channel_id = channel.id
+
+    #Query the database for the guild
+    guild = user_collection.find_one({"guilds.guild_id": str(guild_id)})
+
+    if guild:
+        user_collection.update_one(
+            {"guilds.guild_id": str(guild_id)},
+            {"$set": {"guilds.$.channel_id": str(channel_id)}}
+        )
+        await ctx.send(f"Channel has been set to {channel.mention}.")
+    else:
+        user_collection.insert_one({
+            "guilds": [
+                {
+                    "guild_id": str(guild_id),
+                    "channel_id": str(channel_id)
+                }
+            ]
+        })
+        await ctx.send(f"Channel has been set to {channel.mention}.")
+
+
+@set_channel.error
+async def set_tracking_channel_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ You don't have admin permissions to use this command.")
+
 # Command to track a manga
 @bot.command(name='track')
 async def track(ctx, *, manga_name: str):
@@ -46,55 +79,57 @@ async def track(ctx, *, manga_name: str):
     user = user_collection.find_one({"user_id": str(user_id), "guilds.guild_id": str(guild_id)})
 
     mangas = trackManga(manga_name)
-    title = (mangas[0])['title']
-    link = (mangas[0])['link']
-    print(title)
+    if mangas:
+        title = (mangas[0])['title']
+        link = (mangas[0])['link']
+        print(title)
 
+        if user:
+            #Check if the manga is already being tracked by the user
+            for guild in user['guilds']:
+                if guild['guild_id'] == str(guild_id):
+                    tracked_manga = guild.get('manga_tracking', [])
+                    if not any(manga['manga_name'] == title for manga in tracked_manga):
+                        guild['manga_tracking'].append({
+                            'manga_name': title,
+                            'manga_link': link
+                        })
+                        user_collection.update_one(
+                            {"user_id": str(user_id), "guilds.guild_id": str(guild_id)},
+                            {"$set": {"guilds.$.manga_tracking": guild['manga_tracking']}}
+                        )
+                        existing_collections = db.list_collection_names()
+                        if title not in existing_collections:
+                            db.create_collection(title)
+                            existingCollection(title,link)
+                        await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
+                    else:
+                        await ctx.send(f"You are already tracking {title}.")
+                    break
+        else:
+            #Insert new user tracking data if not found
+            user_collection.insert_one({
+                "user_id": str(user_id),
+                "guilds": [
+                    {
+                        "guild_id": str(guild_id),
+                        "manga_tracking": [
+                            {
+                                "manga_name": title,
+                                "manga_link": link
+                            }
+                        ]
+                    }
+                ]   
+            })
+            existing_collections = db.list_collection_names()
+            if manga_name not in existing_collections:
+                db.create_collection(title)
+                existingCollection(title,link)
+            await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
 
-    if user:
-        #Check if the manga is already being tracked by the user
-        for guild in user['guilds']:
-            if guild['guild_id'] == str(guild_id):
-                tracked_manga = guild.get('manga_tracking', [])
-                if not any(manga['manga_name'] == title for manga in tracked_manga):
-                    guild['manga_tracking'].append({
-                        'manga_name': title,
-                        'manga_link': link
-                    })
-                    user_collection.update_one(
-                        {"user_id": str(user_id), "guilds.guild_id": str(guild_id)},
-                        {"$set": {"guilds.$.manga_tracking": guild['manga_tracking']}}
-                    )
-                    existing_collections = db.list_collection_names()
-                    if manga_name not in existing_collections:
-                        db.create_collection(title)
-                        existingCollection(title,link)
-                    await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
-                else:
-                    await ctx.send(f"You are already tracking {title}.")
-                break
     else:
-        #Insert new user tracking data if not found
-        user_collection.insert_one({
-            "user_id": str(user_id),
-            "guilds": [
-                {
-                    "guild_id": str(guild_id),
-                    "manga_tracking": [
-                        {
-                            "manga_name": title,
-                            "manga_link": link
-                        }
-                    ]
-                }
-            ]
-        })
-        existing_collections = db.list_collection_names()
-        if manga_name not in existing_collections:
-            db.create_collection(title)
-            existingCollection(title,link)
-        await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
-
+        await ctx.send(f"Manga does not exist.")
 
 @bot.command(name='mymanga')
 async def my_manga(ctx):
@@ -114,8 +149,6 @@ async def my_manga(ctx):
                     await ctx.send("You are not tracking any manga.")
     else:
         await ctx.send("You are not tracking any manga.")
-
-# Simple ping command
 
 @bot.command(name='untrack')
 async def untrack(ctx, *, manga_name: str ):
@@ -166,6 +199,9 @@ async def check_chapter_updates():
                 # Fetch all users tracking this manga
                 tracked_users = user_collection.find({"guilds.manga_tracking.manga_name": manga_name})
                 print(tracked_users)
+
+                notified_guilds = set() # Store guilds that have been notified to avoid duplicates
+
                 for user in tracked_users:
                     print(f"Checking user {user['user_id']}...")  # Debugging step
 
@@ -182,6 +218,12 @@ async def check_chapter_updates():
 
                             print(f"✅ Found guild: {guild_obj.name} (ID: {guild_id})")
 
+                            if guild_id in notified_guilds:
+                                print("⚠️ Already notified this guild. Skipping...")
+                                continue
+
+                            notified_guilds.add(guild_id)
+
                             # Check available text channels
                             available_channels = [ch for ch in guild_obj.text_channels if ch.permissions_for(guild_obj.me).send_messages]
                             if not available_channels:
@@ -189,20 +231,34 @@ async def check_chapter_updates():
                                 continue
 
                             # Choose the first available text channel
-                            channel = available_channels[0]
+                            # Try to get the preferred tracking channel from the database
+                            guild_data = user_collection.find_one(
+                                {"guilds.guild_id": str(guild_id)},
+                                {"guilds.$": 1}  # This projects only the matching guild
+                            )
+
+                            if guild_data and "guilds" in guild_data:
+                                preferred_channel_id = guild_data["guilds"][0].get("channel_id")
+                            else:
+                                preferred_channel_id = None
+
+                            # Fetch the preferred channel if it exists
+                            channel = bot.get_channel(int(preferred_channel_id)) if preferred_channel_id else None
+
+                            if not channel:
+                                print(f"⚠️ Preferred channel not set or bot lacks access in {guild_obj.name}.")
+                                continue
+
                             print(f"✅ Using channel: {channel.name} (ID: {channel.id}) in {guild_obj.name}")
 
                             # Send message
                             chapter_title = chapter_title['title']  # Extract the title from the dictionary
-                            message = f"📢 New chapter released: **{chapter_title}**\n📖 Read here: {url}{chapter_link}"
+                            message = f"📢 New chapter released: **{manga_name} - {chapter_title}**\n📖 Read here: {url}{chapter_link}"
 
                             await channel.send(message)
                             print(f"✅ Sent update in {guild_obj.name}: {message}")
 
         await asyncio.sleep(3600)  # Wait 1 hour before checking again
-
-
-
 
 # Event when the bot is ready
 @bot.event
