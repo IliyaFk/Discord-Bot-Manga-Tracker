@@ -5,6 +5,7 @@ import asyncio
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from MangaTracker import *
+import re
 
 #Get discord token from .env file
 load_dotenv()
@@ -124,38 +125,64 @@ async def manga_confirm(ctx, title, link):
 # Command to track a manga
 @bot.command(name='track')
 async def track(ctx, *, manga_name: str):
-    while True:
+    # Reject links upfront
+    if re.search(r'\b(?:https?://|www\.)\S+', manga_name, re.IGNORECASE):
+        await ctx.send("Links are not allowed. Please enter a valid manga name.")
+        return
+
+    attempts = 0  # Track how many times the user rejects a suggestion
+    while attempts < 3:  # Stop after 3 rejections
         mangas = trackManga(manga_name)
 
-        if mangas:
-            title = (mangas[0])['title']
-            link = (mangas[0])['link']
-            print(title)
+        if not mangas:
+            await ctx.send("Manga not found. Please enter a valid name.")
+            return  # Exit if no manga is found
 
-            await ctx.send(f"Did you mean {title}? (yes/no)")
+        title = mangas[0]['title']
+        link = mangas[0]['link']
 
-            def check(m):
-                return m.author == ctx.author and m.channel == ctx.channel
+        await ctx.send(f"Did you mean {title}? (yes/no)")
 
-            try:
-                m = await bot.wait_for('message', check=check, timeout=30.0)
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
 
-                if m.content.lower() == 'yes':
-                    await manga_confirm(ctx, title, link)
-                    break
-                elif m.content.lower() == 'no':
-                    await ctx.send('Please enter the name of the manga you would like to track.')
-                    m = await bot.wait_for('message', check=check, timeout=30.0)
-                    manga_name = m.content
+        try:
+            m = await bot.wait_for('message', check=check, timeout=30.0)
+
+            if re.search(r'\b(?:https?://|www\.)\S+', m.content, re.IGNORECASE):
+                await ctx.send("Links are not allowed. Please enter a valid manga name.")
+                return
+
+            user_input = m.content.lower()
+
+            if user_input == 'yes':
+                await manga_confirm(ctx, title, link)
+                return  # Stop function after successful tracking
+            elif user_input == 'no':
+                attempts += 1
+                if attempts < 3:
+                    await ctx.send("Please enter the name of the manga you would like to track (no links allowed).")
+                    try:
+                        m = await bot.wait_for('message', check=check, timeout=30.0)
+                        if re.search(r'\b(?:https?://|www\.)\S+', m.content, re.IGNORECASE):
+                            await ctx.send("Links are not allowed. Please enter a valid manga name.")
+                            return
+                        manga_name = m.content  # Update manga name
+                    except asyncio.TimeoutError:
+                        await ctx.send("No response received. Cancelling request.")
+                        return
                 else:
-                    await ctx.send('Invalid response. Please try again.')
-                    break
-            except asyncio.TimeoutError:
-                await ctx.send('No response. Please try again.')
-                break
+                    await ctx.send("Too many invalid attempts. Cancelling request.")
+                    return
+            else:
+                await ctx.send("Invalid response. Please reply with 'yes' or 'no'.")
+                return
 
-        else:
-            await ctx.send(f"Manga does not exist.")
+        except asyncio.TimeoutError:
+            await ctx.send('No response received. Cancelling request.')
+            return
+
+
 
 @bot.command(name='mymanga')
 async def my_manga(ctx):
