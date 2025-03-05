@@ -69,67 +69,93 @@ async def set_tracking_channel_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send("❌ You don't have admin permissions to use this command.")
 
-# Command to track a manga
-@bot.command(name='track')
-async def track(ctx, *, manga_name: str):
+async def manga_confirm(ctx, title, link):
     user_id = ctx.author.id
     guild_id = ctx.guild.id
 
     #Query the database for the user
     user = user_collection.find_one({"user_id": str(user_id), "guilds.guild_id": str(guild_id)})
-
-    mangas = trackManga(manga_name)
-    if mangas:
-        title = (mangas[0])['title']
-        link = (mangas[0])['link']
-        print(title)
-
-        if user:
-            #Check if the manga is already being tracked by the user
-            for guild in user['guilds']:
-                if guild['guild_id'] == str(guild_id):
-                    tracked_manga = guild.get('manga_tracking', [])
-                    if not any(manga['manga_name'] == title for manga in tracked_manga):
-                        guild['manga_tracking'].append({
-                            'manga_name': title,
-                            'manga_link': link
-                        })
-                        user_collection.update_one(
-                            {"user_id": str(user_id), "guilds.guild_id": str(guild_id)},
-                            {"$set": {"guilds.$.manga_tracking": guild['manga_tracking']}}
-                        )
-                        existing_collections = db.list_collection_names()
-                        if title not in existing_collections:
-                            db.create_collection(title)
-                            existingCollection(title,link)
-                        await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
-                    else:
-                        await ctx.send(f"You are already tracking {title}.")
-                    break
-        else:
-            #Insert new user tracking data if not found
-            user_collection.insert_one({
-                "user_id": str(user_id),
-                "guilds": [
-                    {
-                        "guild_id": str(guild_id),
-                        "manga_tracking": [
-                            {
-                                "manga_name": title,
-                                "manga_link": link
-                            }
-                        ]
-                    }
-                ]   
-            })
-            existing_collections = db.list_collection_names()
-            if manga_name not in existing_collections:
-                db.create_collection(title)
-                existingCollection(title,link)
-            await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
-
+    
+    if user:
+        #Check if the manga is already being tracked by the user
+        for guild in user['guilds']:
+            if guild['guild_id'] == str(guild_id):
+                tracked_manga = guild.get('manga_tracking', [])
+                if not any(manga['manga_name'] == title for manga in tracked_manga):
+                    guild['manga_tracking'].append({
+                        'manga_name': title,
+                        'manga_link': link
+                    })
+                    user_collection.update_one(
+                        {"user_id": str(user_id), "guilds.guild_id": str(guild_id)},
+                        {"$set": {"guilds.$.manga_tracking": guild['manga_tracking']}}
+                    )
+                    existing_collections = db.list_collection_names()
+                    if title not in existing_collections:
+                        db.create_collection(title)
+                        existingCollection(title,link)
+                    await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
+                else:
+                    await ctx.send(f"You are already tracking {title}.")
+                break
     else:
-        await ctx.send(f"Manga does not exist.")
+        #Insert new user tracking data if not found
+        user_collection.insert_one({
+            "user_id": str(user_id),
+            "guilds": [
+                {
+                    "guild_id": str(guild_id),
+                    "manga_tracking": [
+                        {
+                            "manga_name": title,
+                            "manga_link": link
+                        }
+                    ]
+                }
+            ]   
+        })
+        existing_collections = db.list_collection_names()
+        if title not in existing_collections:
+            db.create_collection(title)
+            existingCollection(title,link)
+        await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
+
+
+# Command to track a manga
+@bot.command(name='track')
+async def track(ctx, *, manga_name: str):
+    while True:
+        mangas = trackManga(manga_name)
+
+        if mangas:
+            title = (mangas[0])['title']
+            link = (mangas[0])['link']
+            print(title)
+
+            await ctx.send(f"Did you mean {title}? (yes/no)")
+
+            def check(m):
+                return m.author == ctx.author and m.channel == ctx.channel
+
+            try:
+                m = await bot.wait_for('message', check=check, timeout=30.0)
+
+                if m.content.lower() == 'yes':
+                    await manga_confirm(ctx, title, link)
+                    break
+                elif m.content.lower() == 'no':
+                    await ctx.send('Please enter the name of the manga you would like to track.')
+                    m = await bot.wait_for('message', check=check, timeout=30.0)
+                    manga_name = m.content
+                else:
+                    await ctx.send('Invalid response. Please try again.')
+                    break
+            except asyncio.TimeoutError:
+                await ctx.send('No response. Please try again.')
+                break
+
+        else:
+            await ctx.send(f"Manga does not exist.")
 
 @bot.command(name='mymanga')
 async def my_manga(ctx):
