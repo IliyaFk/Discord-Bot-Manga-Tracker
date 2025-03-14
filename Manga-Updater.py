@@ -10,12 +10,12 @@ from fuzzywuzzy import fuzz
 
 #Get discord token from .env file
 load_dotenv()
-TOKEN = os.getenv('DISCORD_TOKEN')
+TOKEN = os.getenv('DISCORD_TOKEN_DEV')
 
 # Database Setup -- do I need this anymore??
 MONGO_URI = os.getenv('MONGODB_TOKEN')
 clientDB = MongoClient(MONGO_URI)
-db = clientDB['DiscordDB']
+db = clientDB['DiscordTestDB']
 #chapters_collection = db['chapters']
 #chapters_collection.create_index([('number', 1)], unique=True)
 user_collection = db['users']
@@ -37,7 +37,7 @@ url = "https://mangafire.to"
 # Discord Bot Setup
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents, case_insensitive=True)
+bot = commands.Bot(command_prefix='/', intents=intents, case_insensitive=True)
 
 # Command to set the channel the bot can message in
 @bot.command(name='setchannel')

@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 MONGO_URI = os.getenv('MONGODB_TOKEN')
 clientDB = MongoClient(MONGO_URI)
-db = clientDB['DiscordDB']
+db = clientDB['DiscordTestDB']
 #chapters_collection = db['chapters']
 #chapters_collection.create_index([('number', 1)], unique=True)
 user_collection = db['users']
@@ -21,7 +21,10 @@ link = "https://mangafire.to/filter?keyword="
 
 #Find manga and link based on user input gathered from track command
 def trackManga(mangaName):
-    filter = requests.get(link+mangaName)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36 Edge/16.16299'
+    }
+    filter = requests.get(link+mangaName, headers=headers)
     soupy = BeautifulSoup(filter.content, 'html.parser')
 
     main_section = soupy.find('main')
