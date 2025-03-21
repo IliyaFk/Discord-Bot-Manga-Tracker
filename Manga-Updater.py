@@ -7,31 +7,44 @@ from pymongo import MongoClient
 from MangaTracker import *
 import re
 from fuzzywuzzy import fuzz
+import time
+from pymongo.errors import ConnectionFailure
 
-#Get discord token from .env file
+# Get discord token from .env file
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN_DEV')
 
-# Database Setup -- do I need this anymore??
+# MongoDB Connection Logic
+def connect_to_mongo_with_retries():
+    retries = 5  # Set the number of retry attempts
+    attempt = 0
+    while attempt < retries:
+        try:
+            clientDB = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+            db = clientDB['DiscordTestDB']
+            clientDB.server_info()  # Trigger an exception if MongoDB is unreachable
+            print("✅ MongoDB connected successfully.")
+            return db
+        except ConnectionFailure:
+            attempt += 1
+            print(f"❌ MongoDB connection failed. Retrying... ({attempt}/{retries})")
+            time.sleep(5)  # Wait before retrying
+    print("❌ Failed to connect to MongoDB after multiple attempts.")
+    return None
+
+# Database Setup
 MONGO_URI = os.getenv('MONGODB_TOKEN')
-clientDB = MongoClient(MONGO_URI)
-db = clientDB['DiscordTestDB']
-#chapters_collection = db['chapters']
-#chapters_collection.create_index([('number', 1)], unique=True)
+db = connect_to_mongo_with_retries()
+
+# Check if the database was successfully connected
+if db is None:
+    print("Unable to proceed without MongoDB connection.")
+    exit()
+
+# Database Setup -- you don't need this anymore if db is connected successfully above
 user_collection = db['users']
 
-################################ Delete specific chapter from database for debugging purposes ############################
-#chapter_number_to_delete = 1135  # Change this to the chapter number you want to delete
-#result = One_Piece.delete_one({'number': chapter_number_to_delete})
-##########################################################################################################################
-
-#Delete collection in the database
-#mycol = db["Wistoria: Wand and Sword"]
-#mycol.drop() 
-
-# Function to check if inputed Manga Name is similar to another Manga program returns to track
-
-#Site where I extract chapter info from
+# Site where I extract chapter info from
 url = "https://mangafire.to"
 
 # Discord Bot Setup
@@ -46,7 +59,7 @@ async def set_channel(ctx, channel: discord.TextChannel):
     guild_id = ctx.guild.id
     channel_id = channel.id
 
-    #Query the database for the guild
+    # Query the database for the guild
     guild = user_collection.find_one({"guilds.guild_id": str(guild_id)})
 
     if guild:
@@ -76,11 +89,11 @@ async def manga_confirm(ctx, title, link):
     user_id = ctx.author.id
     guild_id = ctx.guild.id
 
-    #Query the database for the user
+    # Query the database for the user
     user = user_collection.find_one({"user_id": str(user_id), "guilds.guild_id": str(guild_id)})
     
     if user:
-        #Check if the manga is already being tracked by the user
+        # Check if the manga is already being tracked by the user
         for guild in user['guilds']:
             if guild['guild_id'] == str(guild_id):
                 tracked_manga = guild.get('manga_tracking', [])
@@ -96,13 +109,13 @@ async def manga_confirm(ctx, title, link):
                     existing_collections = db.list_collection_names()
                     if title not in existing_collections:
                         db.create_collection(title)
-                        existingCollection(title,link)
+                        existingCollection(title, link)
                     await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
                 else:
                     await ctx.send(f"You are already tracking {title}.")
                 break
     else:
-        #Insert new user tracking data if not found
+        # Insert new user tracking data if not found
         user_collection.insert_one({
             "user_id": str(user_id),
             "guilds": [
@@ -120,9 +133,8 @@ async def manga_confirm(ctx, title, link):
         existing_collections = db.list_collection_names()
         if title not in existing_collections:
             db.create_collection(title)
-            existingCollection(title,link)
+            existingCollection(title, link)
         await ctx.send(f"Started tracking {title} for user {ctx.author.display_name}.")
-
 
 # Command to track a manga
 @bot.command(name='track')
@@ -168,9 +180,6 @@ async def track(ctx, *, manga_name: str):
     except asyncio.TimeoutError:
         await ctx.send('No response received. Cancelling request.')
 
-
-
-
 @bot.command(name='mymanga')
 async def my_manga(ctx):
     user_id = ctx.author.id
@@ -199,11 +208,11 @@ async def untrack(ctx, *, manga_name: str ):
     title = (mangas[0])['title']
     link = (mangas[0])['link']
 
-    #Query the database for the user
+    # Query the database for the user
     user = user_collection.find_one({"user_id": str(user_id), "guilds.guild_id": str(guild_id)})
 
     if user:
-        #Check if the manga is being tracked by the user
+        # Check if the manga is being tracked by the user
         for guild in user['guilds']:
             if guild['guild_id'] == str(guild_id):
                 tracked_manga = guild.get('manga_tracking', [])
@@ -224,79 +233,89 @@ async def check_chapter_updates():
     await bot.wait_until_ready()  # Wait until bot is connected
 
     while not bot.is_closed():
-        new_chapters = checkManga()  # Get new chapters
+        try:
+            new_chapters = checkManga()  # Get new chapters
 
-        if not new_chapters:
-            print("No new chapters found.")
-        else:
-            for chapter in new_chapters:
-                chapter_title = chapter.get('title', 'Unknown Title')
-                chapter_link = chapter.get('link', '')
-                manga_name = chapter.get('manga_name', 'Unknown Manga')
+            if not new_chapters:
+                print("No new chapters found.")
+            else:
+                for chapter in new_chapters:
+                    chapter_title = chapter.get('title', 'Unknown Title')
+                    chapter_link = chapter.get('link', '')
+                    manga_name = chapter.get('manga_name', 'Unknown Manga')
 
-                print(f"Preparing to send update for {manga_name} - {chapter_title}")
+                    print(f"Preparing to send update for {manga_name} - {chapter_title}")
 
-                # Fetch all users tracking this manga
-                tracked_users = user_collection.find({"guilds.manga_tracking.manga_name": manga_name})
-                print(tracked_users)
+                    # Fetch all users tracking this manga
+                    tracked_users = user_collection.find({"guilds.manga_tracking.manga_name": manga_name})
+                    print(tracked_users)
 
-                notified_guilds = set() # Store guilds that have been notified to avoid duplicates
+                    notified_guilds = set()  # Store guilds that have been notified to avoid duplicates
 
-                for user in tracked_users:
-                    print(f"Checking user {user['user_id']}...")  # Debugging step
+                    for user in tracked_users:
+                        print(f"Checking user {user['user_id']}...")  # Debugging step
 
-                    for guild in user["guilds"]:
-                        print(f"Checking guild ID: {guild['guild_id']}")  # Debugging step
+                        for guild in user["guilds"]:
+                            print(f"Checking guild ID: {guild['guild_id']}")  # Debugging step
 
-                        if any(manga["manga_name"] == manga_name for manga in guild["manga_tracking"]):
-                            guild_id = int(guild["guild_id"])
-                            guild_obj = bot.get_guild(guild_id)
+                            if any(manga["manga_name"] == manga_name for manga in guild["manga_tracking"]):
+                                guild_id = int(guild["guild_id"])
+                                guild_obj = bot.get_guild(guild_id)
 
-                            if not guild_obj:
-                                print(f"⚠️ Guild {guild_id} not found. Is the bot in this server?")
-                                continue
+                                if not guild_obj:
+                                    print(f"⚠️ Guild {guild_id} not found. Is the bot in this server?")
+                                    continue
 
-                            print(f"✅ Found guild: {guild_obj.name} (ID: {guild_id})")
+                                print(f"✅ Found guild: {guild_obj.name} (ID: {guild_id})")
 
-                            if guild_id in notified_guilds:
-                                print("⚠️ Already notified this guild. Skipping...")
-                                continue
+                                if guild_id in notified_guilds:
+                                    print("⚠️ Already notified this guild. Skipping...")
+                                    continue
 
-                            notified_guilds.add(guild_id)
+                                notified_guilds.add(guild_id)
 
-                            # Check available text channels
-                            available_channels = [ch for ch in guild_obj.text_channels if ch.permissions_for(guild_obj.me).send_messages]
-                            if not available_channels:
-                                print(f"⚠️ No channels available to send messages in {guild_obj.name}. Skipping...")
-                                continue
+                                # Check available text channels
+                                available_channels = [ch for ch in guild_obj.text_channels if ch.permissions_for(guild_obj.me).send_messages]
+                                if not available_channels:
+                                    print(f"⚠️ No channels available to send messages in {guild_obj.name}. Skipping...")
+                                    continue
 
-                            # Choose the first available text channel
-                            # Try to get the preferred tracking channel from the database
-                            guild_data = user_collection.find_one(
-                                {"guilds.guild_id": str(guild_id)},
-                                {"guilds.$": 1}  # This projects only the matching guild
-                            )
+                                # Choose the first available text channel
+                                # Try to get the preferred tracking channel from the database
+                                guild_data = user_collection.find_one(
+                                    {"guilds.guild_id": str(guild_id)},
+                                    {"guilds.$": 1}  # This projects only the matching guild
+                                )
 
-                            if guild_data and "guilds" in guild_data:
-                                preferred_channel_id = guild_data["guilds"][0].get("channel_id")
-                            else:
-                                preferred_channel_id = None
+                                if guild_data and "guilds" in guild_data:
+                                    preferred_channel_id = guild_data["guilds"][0].get("channel_id")
+                                else:
+                                    preferred_channel_id = None
 
-                            # Fetch the preferred channel if it exists
-                            channel = bot.get_channel(int(preferred_channel_id)) if preferred_channel_id else None
+                                # Fetch the preferred channel if it exists
+                                channel = bot.get_channel(int(preferred_channel_id)) if preferred_channel_id else None
 
-                            if not channel:
-                                print(f"⚠️ Preferred channel not set or bot lacks access in {guild_obj.name}.")
-                                continue
+                                if not channel:
+                                    print(f"⚠️ Preferred channel not set or bot lacks access in {guild_obj.name}.")
+                                    continue
 
-                            print(f"✅ Using channel: {channel.name} (ID: {channel.id}) in {guild_obj.name}")
+                                print(f"✅ Using channel: {channel.name} (ID: {channel.id}) in {guild_obj.name}")
 
-                            # Send message
-                            chapter_title = chapter_title['title']  # Extract the title from the dictionary
-                            message = f"📢 New chapter released: **{manga_name} - {chapter_title}**\n📖 Read here: {url}{chapter_link}"
+                                # Send message
+                                chapter_title = chapter_title['title']  # Extract the title from the dictionary
+                                message = f"📢 New chapter released: **{manga_name} - {chapter_title}**\n📖 Read here: {url}{chapter_link}"
 
-                            await channel.send(message)
-                            print(f"✅ Sent update in {guild_obj.name}: {message}")
+                                await channel.send(message)
+                                print(f"✅ Sent update in {guild_obj.name}: {message}")
+
+        except Exception as e:
+            print(f"❌ Error occurred while checking chapters: {e}")
+            print("Attempting to reconnect to MongoDB...")
+            db = connect_to_mongo_with_retries()  # This function will try to reconnect
+            if not db:
+                print("❌ Could not reconnect to MongoDB. Retrying in a few minutes.")
+                await asyncio.sleep(300)  # Wait for 5 minutes before retrying
+                continue
 
         await asyncio.sleep(3600)  # Wait 1 hour before checking again
 
@@ -305,8 +324,6 @@ async def check_chapter_updates():
 async def on_ready():
     print(f'{bot.user} has connected to Discord!')
     print("Registered commands:", [cmd.name for cmd in bot.commands])
-    # for guild in bot.guilds:
-    #     print(f"Connected to server: {guild.name} (ID: {guild.id})")
     bot.loop.create_task(check_chapter_updates())  # Start the background task
 
 # Run the bot
